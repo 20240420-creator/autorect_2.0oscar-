@@ -15,21 +15,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-const initialProducts = [
-  { id: "PRD-001", name: "Laptop X13", category: "Tecnologia", stock: 12, price: 1299, status: "top", sku: "LPX13-001", supplier: "TechCore" },
-  { id: "PRD-002", name: "Mouse Pro", category: "Accesorios", stock: 36, price: 39, status: "stable", sku: "MPR-011", supplier: "NovaGear" },
-  { id: "PRD-003", name: "Monitor 27\"", category: "Pantallas", stock: 8, price: 349, status: "low", sku: "MON27-022", supplier: "VisionLab" },
-  { id: "PRD-004", name: "Teclado MK", category: "Accesorios", stock: 20, price: 79, status: "stable", sku: "TKMK-014", supplier: "NovaGear" },
-  { id: "PRD-005", name: "Webcam 4K", category: "Video", stock: 9, price: 119, status: "low", sku: "W4K-009", supplier: "MediaFlow" },
-  { id: "PRD-006", name: "Dock USB-C", category: "Conectividad", stock: 17, price: 89, status: "stable", sku: "DUC-103", supplier: "LinkBridge" },
-  { id: "PRD-007", name: "SSD 1TB", category: "Almacenamiento", stock: 14, price: 129, status: "top", sku: "SSD1-200", supplier: "DataCore" },
-  { id: "PRD-008", name: "Auriculares Pro", category: "Audio", stock: 22, price: 99, status: "stable", sku: "AUP-017", supplier: "SoundPeak" },
-  { id: "PRD-009", name: "Hub 7 en 1", category: "Conectividad", stock: 7, price: 59, status: "low", sku: "HUB7-081", supplier: "LinkBridge" },
-  { id: "PRD-010", name: "Silla Ergo", category: "Mobiliario", stock: 11, price: 249, status: "top", sku: "SER-541", supplier: "OfficeLine" },
-  { id: "PRD-011", name: "Router AX", category: "Redes", stock: 16, price: 189, status: "stable", sku: "RAX-300", supplier: "NetCore" },
-  { id: "PRD-012", name: "Base Vertical", category: "Accesorios", stock: 5, price: 49, status: "low", sku: "BVE-105", supplier: "NovaGear" },
-];
+import useProductData from "@/components/products/hooks/useProductData";
 
 const emptyProductForm = {
   name: "",
@@ -104,8 +90,16 @@ const validateProductForm = (form) => {
 };
 
 function Products() {
-  const [products, setProducts] = useState(initialProducts);
-  const [loading] = useState(false);
+  const {
+    products,
+    loading,
+    errorProduct,
+    fetchProducts,
+    handleCreateSubmit: apiCreateSubmit,
+    handleUpdateSubmit: apiUpdateSubmit,
+    deleteProduct
+  } = useProductData();
+
   const [expandedRowId, setExpandedRowId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -197,15 +191,16 @@ function Products() {
     setDeleteTarget(product);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) {
       return;
     }
 
-    setProducts((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-    setExpandedRowId((prev) => (prev === deleteTarget.id ? null : prev));
-    setDeleteTarget(null);
-    toast.success("Producto eliminado correctamente");
+    const deleted = await deleteProduct(deleteTarget.id);
+    if (deleted) {
+      setExpandedRowId((prev) => (prev === deleteTarget.id ? null : prev));
+      setDeleteTarget(null);
+    }
   };
 
   const openEditModal = (product) => {
@@ -217,7 +212,7 @@ function Products() {
     setIsEditOpen(true);
   };
 
-  const handleCreateSubmit = (event) => {
+  const handleCreateSubmit = async (event) => {
     event.preventDefault();
     const errors = validateProductForm(createForm);
     setCreateErrors(errors);
@@ -227,7 +222,6 @@ function Products() {
     }
 
     const payload = {
-      id: `PRD-${String(Date.now()).slice(-6)}`,
       name: createForm.name.trim(),
       category: createForm.category.trim() || "General",
       stock: Number(createForm.stock) || 0,
@@ -237,14 +231,15 @@ function Products() {
       supplier: createForm.supplier.trim() || "N/A",
     };
 
-    setProducts((prev) => [payload, ...prev]);
-    setCreateForm(emptyProductForm);
-    setCreateErrors({});
-    setIsCreateOpen(false);
-    toast.success("Producto creado correctamente");
+    const created = await apiCreateSubmit(payload);
+    if (created) {
+      setCreateForm(emptyProductForm);
+      setCreateErrors({});
+      setIsCreateOpen(false);
+    }
   };
 
-  const handleEditSubmit = (event) => {
+  const handleEditSubmit = async (event) => {
     event.preventDefault();
     const errors = validateProductForm(editForm);
     setEditErrors(errors);
@@ -253,26 +248,21 @@ function Products() {
       return;
     }
 
-    setProducts((prev) =>
-      prev.map((item) =>
-        item.id === editForm.id
-          ? {
-              ...item,
-              name: editForm.name.trim(),
-              category: editForm.category.trim() || "General",
-              stock: Number(editForm.stock) || 0,
-              price: Number(editForm.price) || 0,
-              status: editForm.status,
-              sku: editForm.sku.trim() || "N/A",
-              supplier: editForm.supplier.trim() || "N/A",
-            }
-          : item,
-      ),
-    );
+    const payload = {
+      name: editForm.name.trim(),
+      category: editForm.category.trim() || "General",
+      stock: Number(editForm.stock) || 0,
+      price: Number(editForm.price) || 0,
+      status: editForm.status,
+      sku: editForm.sku.trim() || "N/A",
+      supplier: editForm.supplier.trim() || "N/A",
+    };
 
-    setIsEditOpen(false);
-    setEditErrors({});
-    toast.success("Producto actualizado correctamente");
+    const updated = await apiUpdateSubmit(payload, editForm.id);
+    if (updated) {
+      setIsEditOpen(false);
+      setEditErrors({});
+    }
   };
 
   return (
